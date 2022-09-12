@@ -13,7 +13,9 @@ import TextField from '@mui/material/TextField';
 import * as React from 'react';
 import { useState } from 'react';
 import { categories } from '../utils/categories';
-import { addEntry } from '../utils/mutations';
+import { addEntry, updateEntry, deleteEntry } from '../utils/mutations';
+import QRCode from 'qrcode';
+import { saveAs } from 'file-saver'
 
 // Modal component for individual entries.
 
@@ -24,6 +26,7 @@ type: Type of entry modal being opened.
    "edit" (for opening or editing an existing entry from table).
 user: User making query (The current logged in user). */
 
+var isEdit = false;
 export default function EntryModal({ entry, type, user }) {
 
    // State variables for modal status
@@ -35,6 +38,25 @@ export default function EntryModal({ entry, type, user }) {
    const [link, setLink] = useState(entry.link);
    const [description, setDescription] = useState(entry.description);
    const [category, setCategory] = React.useState(entry.category);
+   const [edit, setEditing] = useState(false);
+   const [imgUrl, setImageUrl] = useState('');
+   const [openAlert, setOpenAlert] = React.useState(false);
+ 
+   // Genereates qr code for entry link
+   const generateQrCode = async () => {
+    try {
+      const response = await QRCode.toDataURL(entry.link);
+      setImageUrl(response);
+    }
+    catch (error) {
+      console.log(error);
+    }
+   }
+
+   // Downloads qr code
+   const downloadQRCode = () => {
+    saveAs(imgUrl, 'qr.jpg') 
+  }
 
    // Modal visibility handlers
 
@@ -44,7 +66,17 @@ export default function EntryModal({ entry, type, user }) {
       setLink(entry.link);
       setDescription(entry.description);
       setCategory(entry.category);
+      generateQrCode();
    };
+
+   const handleClickOpenAdd = () => {
+    setOpen(true);
+    setName(entry.name);
+    setLink(entry.link);
+    setDescription(entry.description);
+    setCategory(entry.category);
+    isEdit = true;
+  };
 
    const handleClose = () => {
       setOpen(false);
@@ -63,22 +95,60 @@ export default function EntryModal({ entry, type, user }) {
       };
 
       addEntry(newEntry).catch(console.error);
+      isEdit = false;
       handleClose();
    };
 
-   // TODO: Add Edit Mutation Handler
+   //Edit Mutation Handler
+   const handleConfirm = () => {
+      const updatedEntry = {
+        name: name,
+        link: link,
+        description: description,
+        user: user?.displayName ? user?.displayName : "GenericUser",
+        category: category,
+        userid: user?.uid,
+        id: entry.id
+      };
+      updateEntry(updatedEntry).catch(console.error);
+      setEditing(false);
+      isEdit = false;
+      handleClose();
+  };
 
-   // TODO: Add Delete Mutation Handler
+   //Delete Mutation Handler
+   const handleDelete = () => {
+      const deletedEntry = {
+        name: name,
+        link: link,
+        description: description,
+        user: user?.displayName ? user?.displayName : "GenericUser",
+        category: category,
+        userid: user?.uid,
+        id: entry.id
+      };
+    deleteEntry(deletedEntry).catch(console.error);
+    handleClose();
+  };
+
+  const handleClickOpenAlert = () => {
+    setOpenAlert(true);
+  };
+
+  const handleCloseAlert = () => {
+    setOpenAlert(false);
+  };
+
+
 
    // Button handlers for modal opening and inside-modal actions.
    // These buttons are displayed conditionally based on if adding or editing/opening.
-   // TODO: You may have to edit these buttons to implement editing/deleting functionality.
 
    const openButton =
       type === "edit" ? <IconButton onClick={handleClickOpen}>
          <OpenInNewIcon />
       </IconButton>
-         : type === "add" ? <Button variant="contained" onClick={handleClickOpen}>
+         : type === "add" ? <Button variant="contained" onClick={handleClickOpenAdd}>
             Add entry
          </Button>
             : null;
@@ -87,6 +157,30 @@ export default function EntryModal({ entry, type, user }) {
       type === "edit" ?
          <DialogActions>
             <Button onClick={handleClose}>Cancel</Button>
+            {/* Delete Alert */}
+            <Button onClick={handleClickOpenAlert} color="error">
+              Delete
+            </Button>
+            <Dialog
+              open={openAlert}
+              onClose={handleCloseAlert}
+              aria-labelledby="alert-dialog-title"
+              aria-describedby="alert-dialog-description"
+            >
+            <DialogTitle id="alert-dialog-title">
+              {"Are you sure want to delete?"}
+          </DialogTitle>
+          <DialogActions>
+            <Button onClick={handleCloseAlert}>Cancel</Button>
+            <Button variant="contained" onClick={handleDelete} autoFocus>Ok</Button>
+          </DialogActions>
+          </Dialog>
+            {edit ? (
+               <Button variant="contained" onClick={handleConfirm}>Confirm</Button>
+            ) :
+            (
+              <Button variant="contained" onClick={() => {setEditing(true); isEdit = true}}>Edit</Button>
+            )}
          </DialogActions>
          : type === "add" ?
             <DialogActions>
@@ -95,13 +189,17 @@ export default function EntryModal({ entry, type, user }) {
             </DialogActions>
             : null;
 
+    const downloadButton = 
+      type === "edit" ?
+          <Button onClick={downloadQRCode}>Download QR Code</Button>
+        : null;
+
    return (
       <div>
          {openButton}
          <Dialog open={open} onClose={handleClose}>
             <DialogTitle>{type === "edit" ? name : "Add Entry"}</DialogTitle>
             <DialogContent>
-               {/* TODO: Feel free to change the properties of these components to implement editing functionality. The InputProps props class for these MUI components allows you to change their traditional CSS properties. */}
                <TextField
                   margin="normal"
                   id="name"
@@ -109,6 +207,9 @@ export default function EntryModal({ entry, type, user }) {
                   fullWidth
                   variant="standard"
                   value={name}
+                  InputProps = {{
+                    readOnly: !isEdit,
+                  }}
                   onChange={(event) => setName(event.target.value)}
                />
                <TextField
@@ -119,8 +220,15 @@ export default function EntryModal({ entry, type, user }) {
                   fullWidth
                   variant="standard"
                   value={link}
+                  InputProps = {{
+                    readOnly: !isEdit,
+                  }}
                   onChange={(event) => setLink(event.target.value)}
                />
+              {/* QR code image and button to downloads */}
+               {imgUrl ? (<img src={imgUrl} alt="img"/>) : null} 
+               <br />
+               {downloadButton}
                <TextField
                   margin="normal"
                   id="description"
@@ -130,6 +238,9 @@ export default function EntryModal({ entry, type, user }) {
                   multiline
                   maxRows={8}
                   value={description}
+                  InputProps = {{
+                    readOnly: !isEdit,
+                  }}
                   onChange={(event) => setDescription(event.target.value)}
                />
 
@@ -140,6 +251,9 @@ export default function EntryModal({ entry, type, user }) {
                      id="demo-simple-select"
                      value={category}
                      label="Category"
+                     inputProps = {{
+                      readOnly: !isEdit,
+                    }}
                      onChange={(event) => setCategory(event.target.value)}
                   >
                      {categories.map((category) => (<MenuItem value={category.id}>{category.name}</MenuItem>))}
