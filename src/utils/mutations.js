@@ -1,4 +1,4 @@
-import { updateDoc, addDoc, collection, doc, deleteDoc, orderBy} from "firebase/firestore";
+import { updateDoc, addDoc, collection, doc, deleteDoc} from "firebase/firestore";
 import { db } from './firebase';
 
 // Functions for database mutations
